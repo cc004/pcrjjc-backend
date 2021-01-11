@@ -12,7 +12,7 @@ PCRAgent aims to obtain uid and access key from the official princonne-redive ap
 
 ## PCRApi
 
-PCRApi uses uid and access key obtained from PCRAgent to provide in-game query services
+PCRApi uses uid and access key obtained from PCRAgent to provide in-game query services. The more accounts you have, the faster query will be and the less possibly your accounts will get banned.
 
 ## queryapi
 
@@ -73,7 +73,7 @@ if `null` is returned, it indicates that the server has queued too much requests
 ### Obtain the access_key
 
 1. Build and run PCRAgent, make sure port 443 is not occupied by other applications.
-2. Bind your android phone or emulator with system version **lower than android 7** to fiddler running on your pc. You can follow the instructions on this [website](`https://www.cnblogs.com/softidea/p/6198864.html`).
+2. Bind your android phone or emulator with system version **lower than android 7** to fiddler running on your pc. You can follow the instructions on this [website](https://www.cnblogs.com/softidea/p/6198864.html).
 3. Configure the fiddler host remapping. Tools -> HOSTS, click `enabling remapping of ...`, and then type the following text into the textbox and press `Save`:
 ```
 127.0.0.1 le1-prod-all-gs-gzlj.bilibiligame.net
