@@ -26,7 +26,7 @@ namespace PCRApi
     {
         public long viewer_id;
         public Guid request_id;
-
+        public DateTime time;
     }
 
     [JsonObject]
@@ -58,13 +58,17 @@ namespace PCRApi
                 {
                     PCRClient.PCRClient client = new PCRClient.PCRClient(new EnvironmentInfo());
 
-                    client.Login(account.uid, account.access_key);
-
                     while (true)
                     {
-                        QueryRequest request = requests.Take();
+                        QueryRequest request;
 
-                        callapi:
+                        while (true)
+                        {
+                            request = requests.Take();
+                            if (DateTime.Now - request.time < new TimeSpan(0, 0, 10)) break;
+                            indexes.TryRemove(request.request_id, out long _);
+                        }
+
                         try
                         {
                             JToken data = client.Callapi("profile/get_profile", new JObject
@@ -74,24 +78,26 @@ namespace PCRApi
 
                             if (data?["server_error"]?.Value<int>("status") == 3)
                             {
+                                indexes.TryRemove(request.request_id, out long _);     
                                 client = new PCRClient.PCRClient(new EnvironmentInfo());
                                 client.Login(account.uid, account.access_key);
-                                goto callapi;
                             }
-
-                            DateTime now = DateTime.Now;
-
-                            results.Enqueue(new QueryResult
+                            else
                             {
-                                time = now,
-                                request_id = request.request_id,
-                                result = data
-                            });
+                                DateTime now = DateTime.Now;
 
-                            indexes.TryRemove(request.request_id, out long _);
+                                results.Enqueue(new QueryResult
+                                {
+                                    time = now,
+                                    request_id = request.request_id,
+                                    result = data
+                                });
 
-                            while (results.Count > 10000)
-                                results.TryDequeue(out QueryResult result);
+                                indexes.TryRemove(request.request_id, out long _);
+
+                                while (results.Count > 10000)
+                                    results.TryDequeue(out QueryResult result);
+                            }
                         }
                         catch (Exception e)
                         {
@@ -113,7 +119,7 @@ namespace PCRApi
         [HttpGet("enqueue")]
         public ActionResult<string> Enqueue(long target_viewer_id)
         {
-            _logger.LogInformation($"[{Source}]api called /enqueue, target_viewer_id = {target_viewer_id}");
+            //_logger.LogInformation($"[{Source}]api called /enqueue, target_viewer_id = {target_viewer_id}");
             if (requests.Count > 10000)
                 return new JObject
                 {
@@ -127,7 +133,8 @@ namespace PCRApi
             requests.Add(new QueryRequest
             {
                 request_id = guid,
-                viewer_id = target_viewer_id
+                viewer_id = target_viewer_id,
+                time = DateTime.Now
             });
 
             return new JObject
@@ -151,7 +158,7 @@ namespace PCRApi
         [HttpGet("query")]
         public ActionResult<string> Query(Guid request_id, bool full)
         {
-            _logger.LogInformation($"[{Source}]api called /query, request_id = {request_id}, full = {full}");
+            //_logger.LogInformation($"[{Source}]api called /query, request_id = {request_id}, full = {full}");
             if (indexes.TryGetValue(request_id, out long index))
             {
                 long delta = indexnow - index;

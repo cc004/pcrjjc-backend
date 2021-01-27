@@ -70,6 +70,8 @@ if `null` is returned, it indicates that the server has queued too much requests
 
 ## Setup Instruction
 
+以下方法已过时，请参考[pcrjjc2](https://github.com/qq1176321897/pcrjjc2)的方法获取access_key和uid
+
 ### Obtain the access_key
 
 1. Build and run PCRAgent, make sure port 443 is not occupied by other applications.

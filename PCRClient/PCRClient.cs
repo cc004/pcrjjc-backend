@@ -84,8 +84,10 @@ namespace PCRClient
             }
 
             if (json["data"] is JObject obj)
+            {
                 if (!noerr && obj.TryGetValue("server_error", out JToken obj2))
                     throw new ApiException($"{obj2["title"]}: {obj2["message"]} (code = {obj2["status"]})");
+            }
 
             //Console.WriteLine(json["data"]);
 
