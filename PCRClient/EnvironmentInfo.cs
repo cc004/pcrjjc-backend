@@ -8,9 +8,9 @@ namespace PCRClient
         [NoUpper]
         public string User_Agent = "Dalvik/2.1.0 (Linux; U; Android 5.1.1; PCRT00 Build/LMY48Z)";
         [NoUpper]
-        public string X_Unity_Version = "2017.4.37c2";
-        public string app_ver = "2.4.10";
-        public string battle_logic_version = "3";
+        public string X_Unity_Version = "2018.4.30f1";
+        public string app_ver = "3.4.5";
+        public string battle_logic_version = "4";
         public string bundle_ver = "";
         public string channel_id = "1";
         public string device = "2";

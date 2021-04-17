@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using PCRClient;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Threading;
@@ -12,21 +13,10 @@ using System.Threading;
 namespace PCRApi
 {
     [JsonObject]
-    internal class QueryResult
-    {
-        public DateTime time;
-        public Guid request_id;
-        public JToken result;
-        public bool iserr;
-
-    }
-
-    [JsonObject]
     internal class QueryRequest
     {
         public long viewer_id;
         public Guid request_id;
-        public DateTime time;
     }
 
     [JsonObject]
@@ -38,10 +28,16 @@ namespace PCRApi
     [ApiController]
     public class ApiController : ControllerBase
     {
-        private readonly ILogger<ApiController> _logger;
+        [JsonObject]
+        private class QueryResult
+        {
+            public Profile result;
+            public long index;
 
-        private static readonly ConcurrentQueue<QueryResult> results = new ConcurrentQueue<QueryResult>();
-        private static readonly ConcurrentDictionary<Guid, long> indexes = new ConcurrentDictionary<Guid, long>();
+        }
+
+        private static readonly Queue<Guid> uids = new Queue<Guid>();
+        private static readonly Dictionary<Guid, QueryResult> results = new Dictionary<Guid, QueryResult>();
         private static readonly BlockingCollection<QueryRequest> requests = new BlockingCollection<QueryRequest>();
         private static int indexnow = 0;
         private static int nextindex = 0;
@@ -61,13 +57,7 @@ namespace PCRApi
                     while (true)
                     {
                         QueryRequest request;
-
-                        while (true)
-                        {
-                            request = requests.Take();
-                            if (DateTime.Now - request.time < new TimeSpan(0, 0, 10)) break;
-                            indexes.TryRemove(request.request_id, out long _);
-                        }
+                        request = requests.Take();
 
                         try
                         {
@@ -78,7 +68,8 @@ namespace PCRApi
 
                             if (data?["server_error"]?.Value<int>("status") == 3)
                             {
-                                indexes.TryRemove(request.request_id, out long _);     
+                                lock (results)
+                                    results.Remove(request.request_id);
                                 client = new PCRClient.PCRClient(new EnvironmentInfo());
                                 client.Login(account.uid, account.access_key);
                             }
@@ -86,17 +77,13 @@ namespace PCRApi
                             {
                                 DateTime now = DateTime.Now;
 
-                                results.Enqueue(new QueryResult
+                                lock (results)
                                 {
-                                    time = now,
-                                    request_id = request.request_id,
-                                    result = data
-                                });
+                                    results[request.request_id].result = data.ToObject<Profile>();
 
-                                indexes.TryRemove(request.request_id, out long _);
-
-                                while (results.Count > 10000)
-                                    results.TryDequeue(out QueryResult result);
+                                    while (uids.Count > 1000)
+                                        results.Remove(uids.Dequeue());
+                                }
                             }
                         }
                         catch (Exception e)
@@ -107,11 +94,6 @@ namespace PCRApi
                         ++indexnow;
                     }
                 })).Start();
-        }
-        public ApiController(ILogger<ApiController> logger)
-        {
-            _logger = logger;
-
         }
 
         private IPEndPoint Source => new IPEndPoint(HttpContext.Connection.RemoteIpAddress, HttpContext.Connection.RemotePort);
@@ -128,13 +110,19 @@ namespace PCRApi
                 }.ToString();
 
             Guid guid = Guid.NewGuid();
-            indexes.TryAdd(guid, Interlocked.Increment(ref nextindex));
+            lock (results)
+            {
+                results.Add(guid, new QueryResult
+                {
+                    index = Interlocked.Increment(ref nextindex)
+                });
+                uids.Enqueue(guid);
+            }
 
             requests.Add(new QueryRequest
             {
                 request_id = guid,
-                viewer_id = target_viewer_id,
-                time = DateTime.Now
+                viewer_id = target_viewer_id
             });
 
             return new JObject
@@ -158,33 +146,30 @@ namespace PCRApi
         [HttpGet("query")]
         public ActionResult<string> Query(Guid request_id, bool full)
         {
-            //_logger.LogInformation($"[{Source}]api called /query, request_id = {request_id}, full = {full}");
-            if (indexes.TryGetValue(request_id, out long index))
+            if (!results.TryGetValue(request_id, out var val))
             {
-                long delta = indexnow - index;
+                return new JObject
+                {
+                    ["status"] = "notfound"
+                }.ToString();
+            }
+            else if (val.result == null)
+            {
+                long delta = indexnow - val.index;
                 return new JObject
                 {
                     ["status"] = "queue",
                     ["pos"] = -delta
                 }.ToString();
             }
-
-            QueryResult result = results.FirstOrDefault(result => result.request_id == request_id);
-
-            if (!full && (result?.result != null))
-                result.result = JToken.FromObject(result.result.ToObject<Profile>());
-
-            if (result == null)
-                return new JObject
-                {
-                    ["status"] = "notfound"
-                }.ToString();
             else
+            {
                 return new JObject
                 {
                     ["status"] = "done",
-                    ["data"] = result.result
+                    ["data"] = JToken.FromObject(val.result)
                 }.ToString();
+            }
         }
     }
 }
